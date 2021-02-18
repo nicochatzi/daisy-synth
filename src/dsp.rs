@@ -22,7 +22,7 @@ pub struct Oscillator {
     sample: f32,
 
     carrier: rume::OwnedLut,
-    modulator: rume::OwnedLut,
+    // modulator: rume::OwnedLut,
     sample_period: f32,
 }
 
@@ -33,7 +33,7 @@ impl Oscillator {
             |x: f32| libm::sin(x as f64 * 2. * core::f64::consts::PI) as f32,
             table::SIZE,
         );
-        osc.modulator = osc.carrier.clone();
+        // osc.modulator = osc.carrier.clone();
         osc
     }
 }
@@ -44,15 +44,17 @@ impl rume::Processor for Oscillator {
     }
 
     fn process(&mut self) {
-        self.modulator.phasor.inc(self.frequency * table::TIME);
-        let sample = self.modulator.advance();
+        self.carrier.phasor.inc(self.frequency * table::TIME);
+        self.sample = self.carrier.advance();
 
+        /*
         self.carrier
             .phasor
             .inc(self.frequency * sample * self.fm * table::TIME);
 
         self.sample = (self.carrier.advance() + sample) * self.amplitude * 0.5;
-        // self.sample = sample * 0.1;
+        // self.sample = sample * 0.1;\
+        */
     }
 }
 

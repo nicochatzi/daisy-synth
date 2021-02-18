@@ -38,11 +38,11 @@ fn main() -> ! {
     });
 
     let _audio_interface = audio_interface.start(move |_fs, block| {
-        // graph.process();
-        // for frame in block {
-        //     let sample = outputs.out.dequeue().unwrap();
-        //     *frame = (sample, sample);
-        // }
+        graph.process();
+        for frame in block {
+            let sample = outputs.out.dequeue().unwrap();
+            *frame = (sample, sample);
+        }
     });
 
     // - usart1 interrupt -----------------------------------------------------
