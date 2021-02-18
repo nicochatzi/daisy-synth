@@ -1,0 +1,27 @@
+[package]
+name = "test-daisy"
+authors = ["Nico Chatzi <nico.chatzigianis@focusrite.com>"]
+edition = "2018"
+version = "0.1.0"
+
+[profile.release]
+opt-level = 'z'
+
+[dependencies]
+cortex-m = "0.6.4"
+cortex-m-rt = { version = "0.6.13", features = ["device"] }
+cortex-m-semihosting = { version = "0.3.5" }
+
+alloc-cortex-m = "0.4.0"
+linked_list_allocator = "0.8.0"
+
+panic-semihosting = { version = "0.5.5" }
+daisy_bsp = { version = "0.2.0", features = ["default", "patch"]  }
+
+rume = { git = "https://github.com/nicochatzi/rume", branch = "feature/add-basic-lab", default-features = false }
+libm = "0.2.1"
+
+num = { version = "0.3.1", default-features = false, features = ["libm"] }
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+log = "0.4.11"
