@@ -97,6 +97,12 @@ impl Processor for Distortion {
     }
 }
 
+mod table {
+    pub const SIZE: usize = 256;
+    pub const FREQ: f32 = 48_000. / SIZE as f32;
+    pub const TIME: f32 = 1. / FREQ;
+}
+
 #[rume::processor]
 pub struct Sine {
     #[input]
@@ -113,23 +119,30 @@ pub struct Sine {
 
     phase: [f32; 2],
     inv_sample_rate: f32,
+    carrier: rume::OwnedLut,
+    modulator: rume::OwnedLut,
 }
 
 impl Processor for Sine {
     fn prepare(&mut self, data: AudioConfig) {
         self.inv_sample_rate = 1.0 / data.sample_rate as f32;
+        self.carrier = rume::OwnedLut::new(
+            |x: f32| libm::sin(x as f64 * 2. * core::f64::consts::PI) as f32,
+            table::SIZE,
+        );
+        self.modulator = self.carrier.clone();
     }
 
     fn process(&mut self) {
         const TWO_PI: f32 = 2.0_f32 * core::f32::consts::PI;
 
-        let increment = TWO_PI * self.frequency * self.inv_sample_rate;
-        self.phase[0] = (self.phase[0] + increment) % TWO_PI;
-        self.sample = self.phase[0].sin();
+        let freq = self.frequency * table::TIME;
 
-        let increment = TWO_PI * self.frequency * self.inv_sample_rate * self.sample * self.amount;
-        self.phase[1] = (self.phase[1] + increment) % TWO_PI;
-        self.sample += self.phase[1].sin();
+        self.modulator.phasor.inc(freq);
+        self.sample = self.modulator.advance();
+
+        self.carrier.phasor.inc(freq * self.amount * self.sample);
+        self.sample += self.carrier.advance();
 
         self.sample *= self.amplitude;
     }
@@ -224,45 +237,23 @@ impl Processor for Envelope {
         }
     }
 }
-graph! {
+
+rume::graph! {
     inputs: {
-        note_on: { kind: trigger },
-        note_off: { kind: trigger },
         freq: { init: 220.0, range: 16.0..880.0, smooth: 10 },
-        fm_amt: { init: 2.0, range: 0.01..16.0, smooth: 10 },
-        dist_amt: { init: 0.2, range: 0.01..0.99, smooth: 10 },
-        attack: { init: 1.0, range: 0.01..10.0, smooth: 10 },
-        decay: { init: 2.0, range: 0.01..10.0, smooth: 10 },
-        sustain: { init: 2.0, range: 0.01..10.0, smooth: 10 },
-        release: { init: 2.0, range: 0.01..10.0, smooth: 10 },
-        val: { init: 125.0, range: 10.0..2000.0, smooth: 10 },
+        amp: { init: 0.05, range: 0.0..0.9, smooth: 10 },
+        fm_amt: { init: 1.0, range: 0.01..16.0, smooth: 10 },
     },
     outputs: {
         audio_out,
     },
     processors: {
         sine: Sine::default(),
-        dist: Distortion::default(),
-        env: Envelope::default(),
-        dly: Delay::default(),
     },
     connections: {
         freq.output    ->  sine.input.0,
-        env.output     ->  sine.input.1,
+        amp.output     ->  sine.input.1,
         fm_amt.output  ->  sine.input.2,
-
-        attack.output   ->  env.input.0,
-        decay.output    ->  env.input.1,
-        sustain.output  ->  env.input.2,
-        release.output  ->  env.input.3,
-
-        note_on.output  ->  env.input.4,
-        note_off.output ->  env.input.5,
-
-        sine.output     ->  dist.input.0,
-        dist_amt.output ->  dist.input.1,
-        dist.output     ->  dly.input.0,
-        val.output      ->  dly.input.1,
-        dly.output      ->  audio_out.input,
+        sine.output    ->  audio_out.input,
     }
 }

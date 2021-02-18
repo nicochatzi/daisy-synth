@@ -101,13 +101,13 @@ fn main() -> ! {
 
     // - main loop ------------------------------------------------------------
 
-    let _ = inputs.note_on.enqueue(1.0);
+    // let _ = inputs.note_on.enqueue(1.0);
     loop {
         let val = {
             let val: u32 = adc1.read(&mut adc1_channel_10).unwrap();
-            880. - (val as f32 * (880. / 65_535.))
+            (val as f32 * (16. / 65_535.))
         };
-        let _ = inputs.freq.enqueue(val);
+        let _ = inputs.fm_amt.enqueue(val);
 
         // let val = {
         //     let val: u32 = adc1.read(&mut adc1_channel_4).unwrap();
