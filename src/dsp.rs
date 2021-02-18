@@ -7,68 +7,63 @@ mod table {
     pub const TIME: f32 = 1. / FREQ;
 }
 
-#[rume::processor]
+#[processor]
 pub struct Oscillator {
     #[input]
     frequency: f32,
 
     #[input]
-    fm: f32,
+    amplitude: f32,
 
     #[input]
-    amplitude: f32,
+    amount: f32,
 
     #[output]
     sample: f32,
 
+    phase: [f32; 2],
+    inv_sample_rate: f32,
     carrier: rume::OwnedLut,
-    // modulator: rume::OwnedLut,
-    sample_period: f32,
+    modulator: rume::OwnedLut,
 }
 
-impl Oscillator {
-    pub fn new() -> Self {
-        let mut osc = Self::default();
-        osc.carrier = rume::OwnedLut::new(
+impl Processor for Oscillator {
+    fn prepare(&mut self, data: AudioConfig) {
+        self.inv_sample_rate = 1.0 / data.sample_rate as f32;
+        self.carrier = rume::OwnedLut::new(
             |x: f32| libm::sin(x as f64 * 2. * core::f64::consts::PI) as f32,
             table::SIZE,
         );
-        // osc.modulator = osc.carrier.clone();
-        osc
-    }
-}
-
-impl rume::Processor for Oscillator {
-    fn prepare(&mut self, config: rume::AudioConfig) {
-        self.sample_period = 1.0 / config.sample_rate as f32;
+        self.modulator = self.carrier.clone();
     }
 
     fn process(&mut self) {
-        self.carrier.phasor.inc(self.frequency * table::TIME);
-        self.sample = self.carrier.advance();
+        const TWO_PI: f32 = 2.0_f32 * core::f32::consts::PI;
 
-        /*
+        let freq = self.frequency * table::TIME;
+
+        self.modulator.phasor.inc(freq);
+        self.sample = self.modulator.advance() * 0.5;
+
         self.carrier
             .phasor
-            .inc(self.frequency * sample * self.fm * table::TIME);
+            .inc(freq * self.amount * self.sample * 0.01);
+        self.sample += self.carrier.advance() * 0.5;
 
-        self.sample = (self.carrier.advance() + sample) * self.amplitude * 0.5;
-        // self.sample = sample * 0.1;\
-        */
+        self.sample *= self.amplitude;
     }
 }
-
 rume::graph! {
     inputs: {
-        freq: { init: 220.0, range: 16.0..880.0, smooth: 10 },
-        fm:   { init:   6.0, range:  0.1..16.0 },
+        freq: { init: 220.0, smooth: 4 },
+        fm:   { init:   2.0, range:  0.1..16.0 },
         amp:  { init:   0.1, range:  0.0..0.8,   smooth: 10 },
     },
     outputs: {
         out,
     },
     processors: {
-        osc: Oscillator::new(),
+        osc: Oscillator::default(),
     },
     connections: {
         freq.output ->  osc.input.0,

@@ -58,8 +58,6 @@ fn main() -> ! {
 
     let mut midi_parser = midi::Parser::new();
 
-    let (mut freq, mut fm, mut amp) = (inputs.freq, inputs.fm, inputs.amp);
-
     // midi_interface
     //     .start(|byte| {
     //         midi_parser.rx(byte, |_channel, message| {
@@ -95,26 +93,29 @@ fn main() -> ! {
         adc::Adc::adc1(dp.ADC1, &mut delay, board.peripheral.ADC12, &board.clocks).enable();
     adc1.set_resolution(adc::Resolution::SIXTEENBIT);
 
-    let gpioc = dp.GPIOC.split(board.peripheral.GPIOC);
-
-    let mut adc1_channel_4 = gpioc.pc4.into_analog(); // pot 1
-    let mut adc1_channel_10 = gpioc.pc0.into_analog(); // pot 2
+    let mut pot_1 = board.pins.SEED_15.into_analog();
+    let mut pot_2 = board.pins.SEED_16.into_analog();
+    let mut pot_3 = board.pins.SEED_21.into_analog();
+    let mut pot_4 = board.pins.SEED_18.into_analog();
 
     // - main loop ------------------------------------------------------------
 
+    let max_val_factor = 1. / 65536.0_f32;
+    let normalise = move |val: u32| -> f32 { 1. - (val as f32 * max_val_factor) };
+
     loop {
-        let val = {
-            let val: u32 = adc1.read(&mut adc1_channel_10).unwrap();
-            (val as f32 * (880. / 65_535.))
-        };
-        let _ = freq.enqueue(val);
+        inputs
+            .freq
+            .enqueue(normalise(adc1.read(&mut pot_1).unwrap()) * 880.);
 
-        let val = {
-            let val: u32 = adc1.read(&mut adc1_channel_4).unwrap();
-            (val as f32 * (0.9 / 65_535.))
-        };
-        let _ = amp.enqueue(val);
+        inputs
+            .amp
+            .enqueue(normalise(adc1.read(&mut pot_2).unwrap()) * 0.1);
 
-        asm::delay(50_000);
+        inputs
+            .fm
+            .enqueue(normalise(adc1.read(&mut pot_3).unwrap()) * 16.);
+
+        cortex_m::asm::wfi();
     }
 }
