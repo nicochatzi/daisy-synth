@@ -3,33 +3,33 @@ use rume::*;
 
 mod table {
     pub const SIZE: usize = 256;
-    pub const FREQ: f32 = 48_000. / SIZE as f32;
+    pub const FREQ: f32 = 44_100. / SIZE as f32;
     pub const TIME: f32 = 1. / FREQ;
 }
 
 #[processor]
 pub struct Oscillator {
     #[input]
-    frequency: f32,
+    freq: f32,
 
     #[input]
-    amplitude: f32,
+    amp_c: f32,
 
     #[input]
-    amount: f32,
+    amp_m: f32,
+
+    #[input]
+    ratio: f32,
 
     #[output]
     sample: f32,
 
-    phase: [f32; 2],
-    inv_sample_rate: f32,
     carrier: rume::OwnedLut,
     modulator: rume::OwnedLut,
 }
 
 impl Processor for Oscillator {
     fn prepare(&mut self, data: AudioConfig) {
-        self.inv_sample_rate = 1.0 / data.sample_rate as f32;
         self.carrier = rume::OwnedLut::new(
             |x: f32| libm::sin(x as f64 * 2. * core::f64::consts::PI) as f32,
             table::SIZE,
@@ -38,26 +38,23 @@ impl Processor for Oscillator {
     }
 
     fn process(&mut self) {
-        const TWO_PI: f32 = 2.0_f32 * core::f32::consts::PI;
+        let freq = self.freq * table::TIME;
 
-        let freq = self.frequency * table::TIME;
+        self.modulator.phasor.inc(freq * self.ratio);
+        let mod_sample = self.modulator.advance() * self.amp_m;
 
-        self.modulator.phasor.inc(freq);
-        self.sample = self.modulator.advance() * 0.5;
+        self.carrier.phasor.inc(freq * mod_sample);
+        self.sample = self.carrier.advance() * self.amp_c;
 
-        self.carrier
-            .phasor
-            .inc(freq * self.amount * self.sample * 0.01);
-        self.sample += self.carrier.advance() * 0.5;
-
-        self.sample *= self.amplitude;
+        // self.sample = (car_sample + mod_sample) * 0.5;
     }
 }
 rume::graph! {
     inputs: {
-        freq: { init: 220.0, smooth: 4 },
-        fm:   { init:   2.0, range:  0.1..16.0 },
-        amp:  { init:   0.1, range:  0.0..0.8,   smooth: 10 },
+        freq:   { init: 220.0,  smooth: 4 },
+        amp_c:  { init: 1.0,    smooth: 4 },
+        amp_m:  { init: 1.0,    smooth: 4 },
+        ratio:  { init: 1.0,    smooth: 4 },
     },
     outputs: {
         out,
@@ -66,9 +63,10 @@ rume::graph! {
         osc: Oscillator::default(),
     },
     connections: {
-        freq.output ->  osc.input.0,
-        fm.output   ->  osc.input.1,
-        amp.output  ->  osc.input.2,
-        osc.output  ->  out.input,
+        freq.output     ->  osc.input.0,
+        amp_c.output    ->  osc.input.1,
+        amp_m.output    ->  osc.input.2,
+        ratio.output    ->  osc.input.3,
+        osc.output      ->  out.input,
     }
 }

@@ -109,12 +109,16 @@ fn main() -> ! {
             .enqueue(normalise(adc1.read(&mut pot_1).unwrap()) * 880.);
 
         inputs
-            .amp
-            .enqueue(normalise(adc1.read(&mut pot_2).unwrap()) * 0.1);
+            .amp_c
+            .enqueue(normalise(adc1.read(&mut pot_2).unwrap()) * 1.);
 
         inputs
-            .fm
-            .enqueue(normalise(adc1.read(&mut pot_3).unwrap()) * 16.);
+            .ratio
+            .enqueue(normalise(adc1.read(&mut pot_3).unwrap()) * 4.);
+
+        inputs
+            .amp_m
+            .enqueue(normalise(adc1.read(&mut pot_4).unwrap()) * 4.);
 
         cortex_m::asm::wfi();
     }
