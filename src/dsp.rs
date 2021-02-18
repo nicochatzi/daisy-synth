@@ -171,13 +171,12 @@ pub struct Envelope {
     sample_rate: f32,
     state: EnvelopeState,
 
-    #[input]
     attack_delta: f32,
-    #[input]
+
     decay_delta: f32,
-    #[input]
+
     sustain_level: f32,
-    #[input]
+
     release_delta: f32,
 
     #[input]
@@ -189,6 +188,10 @@ pub struct Envelope {
 impl Processor for Envelope {
     fn prepare(&mut self, data: rume::AudioConfig) {
         self.sample_rate = data.sample_rate as f32;
+        self.attack_delta = 0.01;
+        self.decay_delta = 0.01;
+        self.sustain_level = 0.1;
+        self.release_delta = 0.01;
     }
 
     fn process(&mut self) {
@@ -240,20 +243,27 @@ impl Processor for Envelope {
 
 rume::graph! {
     inputs: {
-        freq: { init: 220.0, range: 16.0..880.0, smooth: 10 },
-        amp: { init: 0.05, range: 0.0..0.9, smooth: 10 },
-        fm_amt: { init: 1.0, range: 0.01..16.0, smooth: 10 },
+        freq: { init: 220.0, range: 16.0..880.0 },
+        amp: { init: 0.05, range: 0.0..0.9 },
+        fm_amt: { init: 1.0, range: 0.01..16.0 },
+
+        note_on: { kind: trigger },
+        note_off: { kind: trigger },
     },
     outputs: {
         audio_out,
     },
     processors: {
         sine: Sine::default(),
+        env: Envelope::default(),
     },
     connections: {
         freq.output    ->  sine.input.0,
-        amp.output     ->  sine.input.1,
+        env.output     ->  sine.input.1,
         fm_amt.output  ->  sine.input.2,
         sine.output    ->  audio_out.input,
+
+        note_on.output  ->  env.input.0,
+        note_off.output ->  env.input.1,
     }
 }

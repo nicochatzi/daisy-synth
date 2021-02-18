@@ -26,6 +26,20 @@ use rume::*;
 mod dsp;
 mod midi;
 use midi::Message;
+use daisy_bsp::hal::gpio;
+use daisy_bsp::hal::hal::digital::v2::InputPin;
+
+pub trait Switch {
+    fn is_down(&self) -> bool;
+}
+
+pub struct LeftSwitch(pub gpio::gpiog::PG9<gpio::Input<gpio::PullUp>>);
+
+impl Switch for LeftSwitch {
+    fn is_down(&self) -> bool {
+        self.0.is_low().unwrap()
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -34,6 +48,8 @@ fn main() -> ! {
     let mut board = daisy::Board::take().unwrap();
 
     let mut led_user = board.leds.USER;
+
+
     let mut audio_interface = board.SAI1;
     let mut midi_interface = board.USART1;
 
@@ -41,13 +57,13 @@ fn main() -> ! {
 
     // - usart1 interrupt -----------------------------------------------------
 
+    /*
     let mut midi_parser = midi::Parser::new();
 
     // let (mut freq, mut fm, mut amp) = (inputs.freq, inputs.fm, inputs.amp);
-
     midi_interface
         .start(|byte| {
-            led_user.on();
+            // led_user.on();
             // if was_high {
             //     led_user.off();
             // } else {
@@ -65,6 +81,8 @@ fn main() -> ! {
             // });
         })
         .unwrap();
+
+     */
 
     // - audio callback -------------------------------------------------------
 
@@ -85,6 +103,8 @@ fn main() -> ! {
     // - adc ------------------------------------------------------------------
 
     // switch adc_ker_ck_input multiplexer to per_ck
+
+    /*
     board.peripheral.kernel_adc_clk_mux(AdcClkSel::PER);
 
     let cp = unsafe { cortex_m::Peripherals::steal() };
@@ -98,16 +118,38 @@ fn main() -> ! {
     let gpioc = dp.GPIOC.split(board.peripheral.GPIOC);
     let mut adc1_channel_4 = gpioc.pc4.into_analog(); // pot 1
     let mut adc1_channel_10 = gpioc.pc0.into_analog(); // pot 2
+     */
 
     // - main loop ------------------------------------------------------------
 
     // let _ = inputs.note_on.enqueue(1.0);
+
+    let switch = LeftSwitch (board.pins.SEED_27.into_pull_up_input());
+    let mut note_held = false;
+
     loop {
+        /*
         let val = {
             let val: u32 = adc1.read(&mut adc1_channel_10).unwrap();
             (val as f32 * (16. / 65_535.))
         };
         let _ = inputs.fm_amt.enqueue(val);
+         */
+
+        if switch.is_down() {
+            if ! note_held {
+                let _ = inputs.note_on.enqueue(1.0);
+                note_held = true;
+            }
+            led_user.on();
+        } else {
+            if note_held {
+                let _ = inputs.note_off.enqueue(1.0);
+                note_held = false;
+            }
+
+            led_user.off();
+        }
 
         // let val = {
         //     let val: u32 = adc1.read(&mut adc1_channel_4).unwrap();
