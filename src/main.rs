@@ -13,6 +13,15 @@ use daisy_bsp as daisy;
 
 use daisy::hal::prelude::*;
 
+use daisy_bsp::hal;
+use hal::rcc::rec::AdcClkSel;
+use hal::{adc, delay::Delay};
+
+use embedded_hal::digital::v2::OutputPin;
+use hal::hal as embedded_hal;
+
+use hal::{pac, prelude::*};
+
 use rume::*;
 mod dsp;
 mod midi;
@@ -37,7 +46,7 @@ fn main() -> ! {
         num_channels: 2,
     });
 
-    let _audio_interface = audio_interface.start(move |_fs, block| {
+    audio_interface.start(move |_fs, block| {
         graph.process();
         for frame in block {
             let sample = outputs.out.dequeue().unwrap();
@@ -51,46 +60,61 @@ fn main() -> ! {
 
     let (mut freq, mut fm, mut amp) = (inputs.freq, inputs.fm, inputs.amp);
 
-    midi_interface
-        .start(|byte| {
-            midi_parser.rx(byte, |_channel, message| match message {
-                Message::NoteOn { note, velocity } => {
-                    let _ = freq.enqueue(convert::pitch::from_midi(note));
-                }
-                Message::NoteOff { note, velocity } => {}
-                Message::ControlChange { index, value } => {}
-                Message::ProgramChange { value } => {}
-            });
-        })
-        .unwrap();
+    // midi_interface
+    //     .start(|byte| {
+    //         midi_parser.rx(byte, |_channel, message| {
+    //             match message {
+    //                 Message::NoteOn { note, velocity } => {
+    //                     let _ = freq.enqueue(convert::pitch::from_midi(note));
+    //                     led_user.on();
+    //                 }
+    //                 Message::NoteOff { note, velocity } => {
+    //                     led_user.off();
+    //                 }
+    //                 Message::ControlChange { index, value } => {}
+    //                 Message::ProgramChange { value } => {}
+    //             }
+    //         });
+    //     })
+    //     .unwrap();
 
     // - main loop ------------------------------------------------------------
 
-    // let mut knobs = (
-    //     board.pins.SEED_15.into_analog(),
-    //     board.pins.SEED_16.into_analog(),
-    //     board.pins.SEED_17.into_analog(),
-    //     board.pins.SEED_18.into_analog(),
-    // );
+    // - clocks ---------------------------------------------------------------
 
-    let one_second = board.clocks.sys_ck().0;
+    // switch adc_ker_ck_input multiplexer to per_ck
+    board.peripheral.kernel_adc_clk_mux(AdcClkSel::PER);
+
+    // - adc ------------------------------------------------------------------
+
+    let cp = unsafe { cortex_m::Peripherals::steal() };
+    let dp = unsafe { pac::Peripherals::steal() };
+
+    let mut delay = Delay::new(cp.SYST, board.clocks);
+    let mut adc1 =
+        adc::Adc::adc1(dp.ADC1, &mut delay, board.peripheral.ADC12, &board.clocks).enable();
+    adc1.set_resolution(adc::Resolution::SIXTEENBIT);
+
+    let gpioc = dp.GPIOC.split(board.peripheral.GPIOC);
+
+    let mut adc1_channel_4 = gpioc.pc4.into_analog(); // pot 1
+    let mut adc1_channel_10 = gpioc.pc0.into_analog(); // pot 2
+
+    // - main loop ------------------------------------------------------------
 
     loop {
-        // if let Ok(data) = board.adc1.read(&mut knobs.0) {
-        //     let data: u32 = data;
-        //     let val = (1. + (data as f32 / board.adc1.max_sample() as f32)) * 64.;
-        //     if let Ok(_) = freq.enqueue(val) {}
-        // }
-        // if let Ok(data) = board.adc1.read(&mut knobs.1) {
-        //     let data: u32 = data;
-        //     let val = (1. + (data as f32 / board.adc1.max_sample() as f32)) * 8.;
-        //     let _ = fm.enqueue(8.0);
-        // }
-        // if let Ok(data) = board.adc1.read(&mut knobs.1) {
-        //     let data: u32 = data;
-        //     let freq = ((data as f32 / board.adc1.max_sample() as f32) + 1.0) * 64.0;
-        //     if let Ok(_) = inputs.amp.enqueue(freq) {}
-        // }
-        asm::delay(10_000);
+        let val = {
+            let val: u32 = adc1.read(&mut adc1_channel_10).unwrap();
+            (val as f32 * (880. / 65_535.))
+        };
+        let _ = freq.enqueue(val);
+
+        let val = {
+            let val: u32 = adc1.read(&mut adc1_channel_4).unwrap();
+            (val as f32 * (0.9 / 65_535.))
+        };
+        let _ = amp.enqueue(val);
+
+        asm::delay(50_000);
     }
 }
